@@ -80,12 +80,14 @@ function attachCollider(
   root: THREE.Group,
   size: [number, number, number],
   centerY: number,
-  meta: InteractiveTargetMeta
+  meta: InteractiveTargetMeta,
+  offsetX = 0,
+  offsetZ = 0
 ) {
   const colliderGeo = new THREE.BoxGeometry(size[0], size[1], size[2]);
   const colliderMat = new THREE.MeshBasicMaterial({ visible: false });
   const collider = new THREE.Mesh(colliderGeo, colliderMat);
-  collider.position.y = centerY;
+  collider.position.set(offsetX, centerY, offsetZ);
   collider.userData = { ...meta };
   collider.layers.enable(1);
   root.add(collider);
@@ -303,6 +305,87 @@ export function createExhibitSculpture(
   attachCollider(root, [2.4, 3.6, 2.4], topY + 0.9, meta);
   root.add(inner);
   refs.projectGroups.push({ id: projectId, group: root, inner, meta });
+  return root;
+}
+
+export function createExhibitionWingGroup(
+  mats: MuseumMaterialLibrary,
+  refs: AnimatedSculptureRefs
+): THREE.Group {
+  const root = new THREE.Group();
+  const inner = new THREE.Group();
+
+  // Stepped limestone gallery dais anchoring the 3 project pedestals
+  const daisShadow = new THREE.Mesh(
+    new THREE.PlaneGeometry(11.4, 8.6),
+    mats.contactShadow
+  );
+  daisShadow.rotation.x = -Math.PI / 2;
+  daisShadow.position.set(0, 0.018, 0);
+  root.add(daisShadow);
+
+  const daisBase = new THREE.Mesh(
+    new THREE.BoxGeometry(9.6, 0.14, 6.8),
+    mats.archStone
+  );
+  daisBase.position.set(0, 0.07, 0);
+  daisBase.receiveShadow = true;
+  inner.add(daisBase);
+
+  const daisDeck = new THREE.Mesh(
+    new THREE.BoxGeometry(9.0, 0.08, 6.2),
+    mats.ivoryPorcelain
+  );
+  daisDeck.position.set(0, 0.18, 0);
+  daisDeck.receiveShadow = true;
+  inner.add(daisDeck);
+
+  // Framing architectural gallery portal at the rear edge of Zone 03 (z = -3.9 local => -42.5 world)
+  const portalZ = -3.8;
+  const pierGeo = new THREE.BoxGeometry(0.42, 4.5, 0.56);
+  const leftPier = new THREE.Mesh(pierGeo, mats.pedestalDark);
+  leftPier.position.set(-4.55, 2.25, portalZ);
+  leftPier.castShadow = true;
+  leftPier.receiveShadow = true;
+  inner.add(leftPier);
+
+  const rightPier = new THREE.Mesh(pierGeo, mats.pedestalDark);
+  rightPier.position.set(4.55, 2.25, portalZ);
+  rightPier.castShadow = true;
+  rightPier.receiveShadow = true;
+  inner.add(rightPier);
+
+  const lintel = new THREE.Mesh(
+    new THREE.BoxGeometry(9.6, 0.44, 0.62),
+    mats.ivoryPorcelain
+  );
+  lintel.position.set(0, 4.65, portalZ);
+  lintel.castShadow = true;
+  inner.add(lintel);
+
+  const frieze = new THREE.Mesh(
+    new THREE.BoxGeometry(8.6, 0.1, 0.68),
+    mats.lavenderMetal
+  );
+  frieze.position.set(0, 4.38, portalZ);
+  inner.add(frieze);
+
+  root.add(inner);
+
+  const meta: InteractiveTargetMeta = {
+    interactionType: 'section',
+    sectionId: 'exhibitions',
+    kicker: '03 — Exhibitions',
+    title: 'The Main Exhibition Gallery · 3 Curated Projects',
+  };
+
+  // Colliders on the stepped dais, framing piers, and overhead lintel (never occluding the 3 pedestals)
+  attachCollider(root, [9.6, 0.4, 6.8], 0.2, meta, 0, 0);
+  attachCollider(root, [1.1, 4.6, 1.1], 2.3, meta, -4.55, portalZ);
+  attachCollider(root, [1.1, 4.6, 1.1], 2.3, meta, 4.55, portalZ);
+  attachCollider(root, [9.6, 0.9, 1.1], 4.55, meta, 0, portalZ);
+
+  refs.sectionTargets.push({ id: 'exhibitions', group: root, inner, meta });
   return root;
 }
 

@@ -21,10 +21,12 @@ import {
   PUBLICATIONS_LIST,
   TECH_STACK_GROUPS,
 } from '../data/portfolioData';
+import { PROJECTS_CATALOG, type ProjectExhibit } from '../data/projects';
 
 const MODAL_SECTION_ORDER = [
   'home',
   'about',
+  'exhibitions',
   'tech-stack',
   'experience',
   'achievements',
@@ -39,6 +41,7 @@ interface SectionDetailsModalProps {
   onSelectSection: (sectionId: string) => void;
   onOpenResume: () => void;
   onJumpToExhibitions: () => void;
+  onSelectProject: (project: ProjectExhibit) => void;
 }
 
 export const SectionDetailsModal: React.FC<SectionDetailsModalProps> = ({
@@ -47,6 +50,7 @@ export const SectionDetailsModal: React.FC<SectionDetailsModalProps> = ({
   onSelectSection,
   onOpenResume,
   onJumpToExhibitions,
+  onSelectProject,
 }) => {
   useEffect(() => {
     if (!sectionId) return;
@@ -222,6 +226,57 @@ export const SectionDetailsModal: React.FC<SectionDetailsModalProps> = ({
                         </li>
                       ))}
                     </ol>
+                  </div>
+                </div>
+              )}
+
+              {sectionId === 'exhibitions' && (
+                <div className="space-y-7">
+                  <div className="space-y-3">
+                    <h2
+                      id="section-modal-title"
+                      className="font-serif text-3xl sm:text-4xl font-normal text-[#242522]"
+                    >
+                      The Main Exhibition Gallery
+                    </h2>
+                    <p className="text-base leading-[1.75] text-[#4A4843] max-w-2xl">
+                      Three flagship engineering works curated in this wing—inspect
+                      any exhibit below or click its individual 3D pedestal in the room.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    {PROJECTS_CATALOG.map((proj) => (
+                      <article
+                        key={proj.id}
+                        className="bg-[#FFFFFF] border border-[#242522]/12 p-6 sm:p-7 flex flex-col sm:flex-row sm:items-center justify-between gap-5"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[10px] tracking-[0.16em] uppercase text-[#57534E]">
+                            <span className="text-[#56538A] font-medium">{proj.number}</span>
+                            <span aria-hidden="true">·</span>
+                            <span>{proj.categoryLabel}</span>
+                            <span aria-hidden="true">·</span>
+                            <span className="tabular-figures">{proj.year}</span>
+                          </div>
+                          <h3 className="font-serif text-2xl text-[#242522]">
+                            {proj.fullTitle}
+                          </h3>
+                          <p className="text-sm leading-relaxed text-[#4A4843] max-w-xl">
+                            {proj.shortDescription}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => onSelectProject(proj)}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#242522] text-[#F4F1EB] hover:bg-[#56538A] transition-colors font-mono text-[11px] tracking-[0.14em] uppercase whitespace-nowrap shrink-0 self-start sm:self-center cursor-pointer"
+                        >
+                          <span>Inspect Exhibit</span>
+                          <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
+                        </button>
+                      </article>
+                    ))}
                   </div>
                 </div>
               )}

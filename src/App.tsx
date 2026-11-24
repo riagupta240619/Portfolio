@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, useScroll, useSpring } from 'motion/react';
 import { MUSEUM_NAV_ITEMS } from './data/portfolioData';
 import { PROJECTS_CATALOG, type ProjectExhibit } from './data/projects';
@@ -47,13 +47,6 @@ export default function App() {
     restDelta: 0.001,
   });
 
-  useEffect(() => {
-    const unsubscribe = scrollYProgress.on('change', (latest) => {
-      setScrollProgress(latest);
-    });
-    return () => unsubscribe();
-  }, [scrollYProgress]);
-
   // Keyboard shortcut 'H' toggles spatial dock visibility
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -83,56 +76,141 @@ export default function App() {
     setShowIntro(true);
   }, []);
 
-  const handleNavigate = useCallback(
-    (sectionId: string) => {
-      setActiveSection(sectionId);
-      if (zenMode) {
-        const idx = MUSEUM_NAV_ITEMS.findIndex((item) => item.id === sectionId);
-        if (idx >= 0) {
-          setScrollProgress(idx / Math.max(1, MUSEUM_NAV_ITEMS.length - 1));
-        }
-      }
-      const el = document.getElementById(sectionId);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    },
-    [zenMode]
-  );
+  const programmaticNavLockUntilRef = useRef<number>(0);
+
+  const handleNavigate = useCallback((sectionId: string) => {
+    programmaticNavLockUntilRef.current = performance.now() + 750;
+    setActiveSection(sectionId);
+    const el = document.getElementById(sectionId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
 
   const handleEnterOrbit = useCallback(() => {
     setCameraMode('orbit');
     setZenMode(true);
   }, []);
 
-  // Track active museum room via IntersectionObserver
+  // Synchronize active museum room & 3D waypoint progress deterministically
+  // Accounts for both 2D section boundaries and 3D corridor chamber midpoints in zenMode
   useEffect(() => {
-    if (zenMode) return;
     const sectionIds = MUSEUM_NAV_ITEMS.map((item) => item.id);
-    const elements = sectionIds
-      .map((id) => document.getElementById(id))
-      .filter((el): el is HTMLElement => el !== null);
+    let rafId = 0;
 
-    if (elements.length === 0) return;
+    const updateFromScroll = () => {
+      rafId = 0;
+      const elements = sectionIds
+        .map((id) => ({ id, el: document.getElementById(id) }))
+        .filter((entry): entry is { id: string; el: HTMLElement } => entry.el !== null);
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+      if (elements.length === 0) return;
 
-        if (visible.length > 0 && visible[0].target.id) {
-          setActiveSection(visible[0].target.id);
-        }
-      },
-      {
-        rootMargin: '-20% 0px -55% 0px',
-        threshold: [0.05, 0.25, 0.5],
+      const scrollY = window.scrollY;
+      const vh = window.innerHeight || 1;
+      const docHeight = document.documentElement.scrollHeight;
+      const maxScroll = Math.max(1, docHeight - vh);
+      const n = elements.length;
+
+      // 1. Piecewise-linear mapping so each section top aligns with its 3D camera waypoint
+      const anchors: number[] = [];
+      for (let i = 0; i < n; i++) {
+        const rawTop = elements[i].el.getBoundingClientRect().top + scrollY;
+        const clampedTop = i === 0 ? 0 : Math.min(rawTop, maxScroll);
+        const monotonicTop = i === 0 ? 0 : Math.max(anchors[i - 1], clampedTop);
+        anchors.push(monotonicTop);
       }
-    );
+      if (n > 1) {
+        anchors[n - 1] = Math.max(anchors[n - 2], Math.min(anchors[n - 1], maxScroll));
+      }
 
-    elements.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
+      let progress = n <= 1 ? 0 : 1;
+      if (n > 1) {
+        if (scrollY <= anchors[0]) {
+          progress = 0;
+        } else if (scrollY < anchors[n - 1]) {
+          for (let i = 0; i < n - 1; i++) {
+            const start = anchors[i];
+            const end = anchors[i + 1];
+            if (scrollY <= end && end > start) {
+              const localT = (scrollY - start) / (end - start);
+              progress = (i + localT) / (n - 1);
+              break;
+            }
+          }
+        }
+      }
+
+      setScrollProgress(progress);
+
+      // 2. Determine active section title for Navigation & SpatialDock
+      let nextActive = elements[0].id;
+
+      if (scrollY + vh >= docHeight - 24) {
+        nextActive = elements[n - 1].id;
+      } else if (zenMode && n > 1) {
+        // In Zen Mode (3D corridor only), match the 3D chamber currently in camera view
+        const roomIndex = Math.min(
+          n - 1,
+          Math.max(0, Math.round(progress * (n - 1)))
+        );
+        nextActive = elements[roomIndex].id;
+      } else {
+        // With editorial panels visible, pick the section with largest visible area
+        // inside the readable viewport band (below mobile sticky header, above dock)
+        const bandTop = window.innerWidth < 1024 ? 56 : 0;
+        const bandBottom = vh * 0.84;
+        let bestOverlap = -1;
+
+        for (const { id, el } of elements) {
+          const rect = el.getBoundingClientRect();
+          const visTop = Math.max(rect.top, bandTop);
+          const visBottom = Math.min(rect.bottom, bandBottom);
+          const overlap = Math.max(0, visBottom - visTop);
+          if (overlap > bestOverlap) {
+            bestOverlap = overlap;
+            nextActive = id;
+          }
+        }
+      }
+
+      if (performance.now() >= programmaticNavLockUntilRef.current) {
+        setActiveSection((prev) => (prev === nextActive ? prev : nextActive));
+      }
+    };
+
+    const scheduleUpdate = () => {
+      if (rafId !== 0) return;
+      rafId = window.requestAnimationFrame(updateFromScroll);
+    };
+
+    const cancelProgrammaticLock = () => {
+      programmaticNavLockUntilRef.current = 0;
+    };
+
+    updateFromScroll();
+    window.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('resize', scheduleUpdate, { passive: true });
+    window.addEventListener('wheel', cancelProgrammaticLock, { passive: true });
+    window.addEventListener('touchstart', cancelProgrammaticLock, { passive: true });
+
+    const mainEl = document.getElementById('main-content');
+    const resizeObserver =
+      mainEl && typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(scheduleUpdate)
+        : null;
+    if (mainEl && resizeObserver) {
+      resizeObserver.observe(mainEl);
+    }
+
+    return () => {
+      if (rafId !== 0) window.cancelAnimationFrame(rafId);
+      window.removeEventListener('scroll', scheduleUpdate);
+      window.removeEventListener('resize', scheduleUpdate);
+      window.removeEventListener('wheel', cancelProgrammaticLock);
+      window.removeEventListener('touchstart', cancelProgrammaticLock);
+      resizeObserver?.disconnect();
+    };
   }, [zenMode]);
 
   return (
@@ -183,7 +261,9 @@ export default function App() {
       <main
         id="main-content"
         className={`relative z-10 lg:pl-64 transition-opacity duration-300 ${
-          zenMode ? 'opacity-0 invisible select-none' : 'opacity-100 pointer-events-none'
+          zenMode
+            ? 'opacity-0 zen-hidden select-none'
+            : 'opacity-100 pointer-events-none'
         }`}
       >
         <HomeHero
@@ -236,6 +316,10 @@ export default function App() {
         onJumpToExhibitions={() => {
           setZenMode(false);
           handleNavigate('exhibitions');
+        }}
+        onSelectProject={(proj) => {
+          setSelectedSectionModal(null);
+          setSelectedProject(proj);
         }}
       />
 

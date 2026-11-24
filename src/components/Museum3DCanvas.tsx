@@ -56,16 +56,32 @@ export const Museum3DCanvas: React.FC<Museum3DCanvasProps> = ({
   onHoverChangeRef.current = onHoveredTargetChange;
 
   const orbitTargetGoalRef = useRef<{ pos: THREE.Vector3; target: THREE.Vector3 } | null>(null);
+  const prevEffectModeRef = useRef<CameraMode>(cameraMode);
+  const prevEffectSectionRef = useRef<string>(activeSection);
 
   useEffect(() => {
+    const modeJustChanged = prevEffectModeRef.current !== cameraMode;
+    const sectionJustChanged = prevEffectSectionRef.current !== activeSection;
+
     cameraModeRef.current = cameraMode;
-    const wp =
-      MUSEUM_WAYPOINTS.find((w) => w.id === activeSection) ?? MUSEUM_WAYPOINTS[0];
+    prevEffectModeRef.current = cameraMode;
+    prevEffectSectionRef.current = activeSection;
+
     if (cameraMode === 'orbit') {
-      orbitTargetGoalRef.current = {
-        pos: wp.cameraPos.clone(),
-        target: wp.lookAt.clone(),
-      };
+      if (modeJustChanged) {
+        // Preserve current 3D view when entering Orbit from Walk mode
+        orbitTargetGoalRef.current = null;
+      } else if (sectionJustChanged) {
+        // Already in Orbit mode and user explicitly chose another room
+        const wp =
+          MUSEUM_WAYPOINTS.find((w) => w.id === activeSection) ?? MUSEUM_WAYPOINTS[0];
+        orbitTargetGoalRef.current = {
+          pos: wp.cameraPos.clone(),
+          target: wp.lookAt.clone(),
+        };
+      }
+    } else {
+      orbitTargetGoalRef.current = null;
     }
   }, [cameraMode, activeSection]);
 
@@ -140,19 +156,42 @@ export const Museum3DCanvas: React.FC<Museum3DCanvasProps> = ({
     controls.enableDamping = !isSoftwareGl;
     controls.dampingFactor = 0.06;
     controls.maxPolarAngle = Math.PI * 0.49;
-    controls.minDistance = 2.5;
+    controls.minDistance = 2.2;
     controls.maxDistance = 32;
     controls.target.copy(MUSEUM_WAYPOINTS[0].lookAt);
     controls.enabled = cameraModeRef.current === 'orbit';
+    renderer.domElement.style.touchAction =
+      cameraModeRef.current === 'orbit' ? 'none' : 'pan-y';
 
     const handleControlStart = () => {
       orbitTargetGoalRef.current = null;
     };
     controls.addEventListener('start', handleControlStart);
 
+    // Keyboard forward/backward walking when in Free Orbit mode
+    const walkKeys: Record<string, boolean> = {};
+    const onKeyDownWalk = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      walkKeys[e.code] = true;
+    };
+    const onKeyUpWalk = (e: KeyboardEvent) => {
+      walkKeys[e.code] = false;
+    };
+    window.addEventListener('keydown', onKeyDownWalk);
+    window.addEventListener('keyup', onKeyUpWalk);
+
     // Unified Raycasting for ALL 9 Museum Rooms (Projects + Section Sculptures)
     const raycaster = new THREE.Raycaster();
     raycaster.layers.set(1);
+    raycaster.far = 26;
     let hoveredKey: string | null = null;
     let lastRaycastTime = 0;
     let pointerOffsetX = 0;
@@ -212,7 +251,6 @@ export const Museum3DCanvas: React.FC<Museum3DCanvasProps> = ({
     };
 
     const onPointerClick = (e: MouseEvent) => {
-      // Ignore orbit drag-release gestures (> 6px pointer movement)
       if (pointerDownPos) {
         const dx = e.clientX - pointerDownPos.x;
         const dy = e.clientY - pointerDownPos.y;
@@ -302,6 +340,8 @@ export const Museum3DCanvas: React.FC<Museum3DCanvasProps> = ({
       const mode = cameraModeRef.current;
       if (mode !== prevCameraModeRef.current) {
         controls.enabled = mode === 'orbit';
+        renderer.domElement.style.touchAction =
+          mode === 'orbit' ? 'none' : 'pan-y';
         if (mode === 'orbit') {
           controls.target.copy(_curLookAt);
         }
@@ -328,6 +368,17 @@ export const Museum3DCanvas: React.FC<Museum3DCanvasProps> = ({
         _curLookAt.z = THREE.MathUtils.damp(_curLookAt.z, _camTargetLook.z, dampFactor, delta);
         camera.lookAt(_curLookAt);
       } else {
+        // W/S or ArrowUp/ArrowDown walk forward/backward down corridor in Orbit mode
+        const walkSpeed = 14 * delta;
+        let dz = 0;
+        if (walkKeys['KeyW'] || walkKeys['ArrowUp']) dz -= walkSpeed;
+        if (walkKeys['KeyS'] || walkKeys['ArrowDown']) dz += walkSpeed;
+        if (dz !== 0) {
+          orbitTargetGoalRef.current = null;
+          camera.position.z = THREE.MathUtils.clamp(camera.position.z + dz, -148, 14);
+          controls.target.z = THREE.MathUtils.clamp(controls.target.z + dz, -156, 6);
+        }
+
         if (orbitTargetGoalRef.current) {
           const { pos, target } = orbitTargetGoalRef.current;
           camera.position.x = THREE.MathUtils.damp(camera.position.x, pos.x, 4.5, delta);
@@ -368,7 +419,7 @@ export const Museum3DCanvas: React.FC<Museum3DCanvasProps> = ({
 
         world.refs.sectionTargets.forEach((st) => {
           const isHovered = hoveredKey === `section:${st.id}`;
-          const targetScale = isHovered ? 1.07 : 1.0;
+          const targetScale = isHovered ? (st.id === 'exhibitions' ? 1.015 : 1.07) : 1.0;
           st.inner.scale.x = THREE.MathUtils.damp(st.inner.scale.x, targetScale, 8, delta);
           st.inner.scale.y = THREE.MathUtils.damp(st.inner.scale.y, targetScale, 8, delta);
           st.inner.scale.z = THREE.MathUtils.damp(st.inner.scale.z, targetScale, 8, delta);
@@ -418,6 +469,8 @@ export const Museum3DCanvas: React.FC<Museum3DCanvasProps> = ({
       cancelAnimationFrame(frameId);
       window.clearTimeout(frameId);
       window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('keydown', onKeyDownWalk);
+      window.removeEventListener('keyup', onKeyUpWalk);
       window.removeEventListener('resize', onResize);
       controls.removeEventListener('start', handleControlStart);
       controls.dispose();

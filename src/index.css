@@ -48,6 +48,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.zen-hidden,
+.zen-hidden * {
+  pointer-events: none !important;
+}
+
 @media print {
   body {
     background: #FFFFFF !important;

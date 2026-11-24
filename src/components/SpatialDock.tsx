@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -36,14 +36,19 @@ export const SpatialDock: React.FC<SpatialDockProps> = ({
   onToggleZenMode,
   onToggleCollapsed,
 }) => {
+  const [hoveredRoomIndex, setHoveredRoomIndex] = useState<number | null>(null);
+
   const currentIdx = Math.max(
     0,
     MUSEUM_NAV_ITEMS.findIndex((item) => item.id === activeSection)
   );
   const currentRoom = MUSEUM_NAV_ITEMS[currentIdx] ?? MUSEUM_NAV_ITEMS[0];
+  const previewRoom =
+    hoveredRoomIndex !== null ? MUSEUM_NAV_ITEMS[hoveredRoomIndex] : null;
 
   const handlePrev = () => {
-    const prevIdx = (currentIdx - 1 + MUSEUM_NAV_ITEMS.length) % MUSEUM_NAV_ITEMS.length;
+    const prevIdx =
+      (currentIdx - 1 + MUSEUM_NAV_ITEMS.length) % MUSEUM_NAV_ITEMS.length;
     onSelectSection(MUSEUM_NAV_ITEMS[prevIdx].id);
   };
 
@@ -53,124 +58,180 @@ export const SpatialDock: React.FC<SpatialDockProps> = ({
   };
 
   return (
-    <div className="no-print fixed bottom-4 left-1/2 lg:left-[calc(50%+8rem)] -translate-x-1/2 z-30 flex flex-col items-center max-w-[94vw] pointer-events-none">
-      {/* Live 3D Raycast Hover Plaque for ANY Room or Project Sculpture */}
+    <div className="no-print fixed bottom-3 sm:bottom-4 left-1/2 lg:left-[calc(50%+8rem)] -translate-x-1/2 z-30 flex flex-col items-center max-w-[calc(100vw-16px)] pointer-events-none">
+      {/* Live 3D Raycast Hover Plaque or Desktop Preview Tooltip */}
       {hoveredTarget ? (
-        <div className="mb-2.5 px-4 py-2 bg-[#242522] text-[#F4F1EB] border border-[#F4F1EB]/15 shadow-lg pointer-events-none text-center">
-          <p className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#B9C6D0]">
-            {hoveredTarget.kicker} · Click 3D Object to View
+        <div className="mb-2 px-3.5 py-1.5 bg-[#242522] text-[#F4F1EB] border border-[#F4F1EB]/15 shadow-lg pointer-events-none text-center max-w-[90vw]">
+          <p className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#B9C6D0] truncate">
+            {hoveredTarget.kicker} · Tap to Inspect
           </p>
-          <p className="font-serif text-base text-[#F4F1EB]">
+          <p className="font-serif text-sm sm:text-base text-[#F4F1EB] truncate">
             {hoveredTarget.title}
           </p>
         </div>
+      ) : previewRoom ? (
+        <div className="hidden sm:block mb-2 px-3 py-1 bg-[#242522] text-[#F4F1EB] font-mono text-[10px] tracking-[0.14em] uppercase shadow-md pointer-events-none">
+          {previewRoom.navLabel} — {previewRoom.subtitle}
+        </div>
       ) : (
-        zenMode && (
-          <div className="mb-2 px-3.5 py-1.5 bg-[#242522]/90 text-[#EBE7DF] border border-[#F4F1EB]/15 font-mono text-[10px] tracking-[0.14em] uppercase pointer-events-none">
+        zenMode &&
+        !dockCollapsed && (
+          <div className="hidden sm:block mb-2 px-3.5 py-1 bg-[#F4F1EB] text-[#4A4843] border border-[#242522]/15 font-mono text-[10px] tracking-[0.14em] uppercase shadow-sm pointer-events-none">
             {cameraMode === 'orbit'
-              ? 'Drag to Orbit · Scroll to Zoom · Click Any 3D Sculpture'
+              ? 'Drag to Orbit · W/S to Walk · Click Any Sculpture'
               : 'Scroll to Walk · Click Any 3D Sculpture to Inspect'}
           </div>
         )
       )}
 
-      {/* Collapse / Expand Handle */}
-      <button
-        type="button"
-        onClick={onToggleCollapsed}
-        aria-expanded={!dockCollapsed}
-        className="pointer-events-auto inline-flex items-center gap-1.5 px-3.5 py-1 bg-[#242522] text-[#F4F1EB] border border-[#F4F1EB]/15 font-mono text-[10px] tracking-[0.16em] uppercase hover:bg-[#56538A] transition-colors cursor-pointer"
-      >
-        {dockCollapsed ? (
-          <>
-            <ChevronUp className="w-3 h-3" aria-hidden="true" />
-            <span>Show 3D Controls</span>
-          </>
-        ) : (
-          <>
-            <ChevronDown className="w-3 h-3" aria-hidden="true" />
-            <span>Hide Controls</span>
-          </>
-        )}
-      </button>
-
-      {/* Main Spatial Control Bar */}
-      {!dockCollapsed && (
+      {/* Collapsed State: Ultra-compact single tab */}
+      {dockCollapsed ? (
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          aria-expanded={false}
+          className="pointer-events-auto inline-flex items-center gap-2 px-3.5 py-1.5 bg-[#F4F1EB] text-[#242522] border border-[#242522]/20 hover:border-[#242522] shadow-md font-mono text-[10px] sm:text-[11px] tracking-[0.14em] uppercase transition-colors whitespace-nowrap cursor-pointer"
+        >
+          <ChevronUp className="w-3.5 h-3.5 text-[#56538A]" aria-hidden="true" />
+          <span className="sm:hidden tabular-figures">{currentRoom.number}/09</span>
+          <span className="hidden sm:inline">{currentRoom.navLabel}</span>
+        </button>
+      ) : (
+        /* Expanded Museum Spatial Dock — Single Row on Mobile & Desktop */
         <div
           role="region"
-          aria-label="3D Museum Spatial Controls"
-          className="pointer-events-auto mt-1 bg-[#242522] text-[#F4F1EB] border border-[#F4F1EB]/15 px-3 sm:px-4 py-2 flex flex-wrap items-center justify-center gap-2 sm:gap-3 shadow-xl"
+          aria-label="3D Museum Navigation & View Controls"
+          className="pointer-events-auto bg-[#F4F1EB] text-[#242522] border border-[#242522]/18 shadow-[0_10px_28px_rgba(36,37,34,0.12)] px-2 sm:px-3.5 py-1.5 sm:py-2 flex flex-nowrap items-center justify-center gap-1.5 sm:gap-3"
         >
-          {/* Room Stepper */}
-          <div className="flex items-center gap-1.5 pr-2 sm:pr-3 border-r border-[#F4F1EB]/15">
+          {/* Zone 1: Compact Room Stepper + Floorplan Dots */}
+          <div className="flex items-center gap-0.5 sm:gap-1.5 sm:pr-3 sm:border-r border-[#242522]/12 shrink-0">
             <button
               type="button"
               onClick={handlePrev}
               aria-label="Previous museum room"
-              className="p-1.5 text-[#EBE7DF] hover:text-white hover:bg-[#F4F1EB]/10 transition-colors cursor-pointer"
+              className="w-8 h-8 inline-flex items-center justify-center text-[#57534E] hover:text-[#242522] hover:bg-[#EBE7DF] transition-colors cursor-pointer shrink-0"
             >
               <ChevronLeft className="w-4 h-4" aria-hidden="true" />
             </button>
 
-            <span className="font-mono text-[11px] tracking-[0.12em] uppercase text-[#F4F1EB] min-w-[118px] text-center whitespace-nowrap tabular-figures">
-              {currentRoom.navLabel}
-            </span>
+            <div className="flex flex-col items-center px-1 sm:min-w-[116px]">
+              {/* Phone: compact 01/09 counter so it never fills screen */}
+              <span className="sm:hidden font-mono text-[11px] font-medium tracking-[0.08em] text-[#242522] whitespace-nowrap tabular-figures">
+                {currentRoom.number}/09
+              </span>
+              {/* Tablet/Desktop: full room label + interactive floorplan dots */}
+              <span className="hidden sm:inline font-mono text-[11px] font-medium tracking-[0.12em] uppercase text-[#242522] whitespace-nowrap tabular-figures">
+                {currentRoom.navLabel}
+              </span>
+              <div
+                className="hidden sm:flex items-center gap-1 mt-1"
+                role="navigation"
+                aria-label="Jump to museum chamber"
+              >
+                {MUSEUM_NAV_ITEMS.map((item, idx) => {
+                  const isActive = idx === currentIdx;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onSelectSection(item.id)}
+                      onMouseEnter={() => setHoveredRoomIndex(idx)}
+                      onMouseLeave={() => setHoveredRoomIndex(null)}
+                      aria-label={`Go to ${item.navLabel}`}
+                      aria-current={isActive ? 'step' : undefined}
+                      className={`h-1.5 transition-all duration-200 cursor-pointer ${
+                        isActive
+                          ? 'w-4 bg-[#56538A]'
+                          : 'w-1.5 bg-[#242522]/22 hover:bg-[#242522]/55'
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
 
             <button
               type="button"
               onClick={handleNext}
               aria-label="Next museum room"
-              className="p-1.5 text-[#EBE7DF] hover:text-white hover:bg-[#F4F1EB]/10 transition-colors cursor-pointer"
+              className="w-8 h-8 inline-flex items-center justify-center text-[#57534E] hover:text-[#242522] hover:bg-[#EBE7DF] transition-colors cursor-pointer shrink-0"
             >
               <ChevronRight className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
 
-          {/* Camera Navigation Mode */}
-          <button
-            type="button"
-            onClick={onToggleCameraMode}
-            className={`inline-flex items-center gap-2 px-3 py-1.5 font-mono text-[11px] tracking-[0.12em] uppercase border transition-colors whitespace-nowrap cursor-pointer ${
-              cameraMode === 'orbit'
-                ? 'bg-[#7774A9] text-white border-[#7774A9]'
-                : 'bg-transparent text-[#EBE7DF] border-[#F4F1EB]/20 hover:border-[#F4F1EB]/60'
-            }`}
+          {/* Zone 2: Camera Mode Segmented Control (Walk vs Orbit) */}
+          <div
+            role="group"
+            aria-label="Camera navigation mode"
+            className="inline-flex items-center bg-[#EBE7DF] p-0.5 border border-[#242522]/12 shrink-0"
           >
-            {cameraMode === 'orbit' ? (
-              <>
-                <Move3d className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>3D Orbit: On</span>
-              </>
-            ) : (
-              <>
-                <Compass className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>3D Orbit: Off</span>
-              </>
-            )}
-          </button>
+            <button
+              type="button"
+              onClick={() => cameraMode !== 'guided' && onToggleCameraMode()}
+              aria-pressed={cameraMode === 'guided'}
+              className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1.5 font-mono text-[10px] sm:text-[11px] tracking-[0.08em] uppercase transition-colors whitespace-nowrap cursor-pointer ${
+                cameraMode === 'guided'
+                  ? 'bg-[#242522] text-[#F4F1EB]'
+                  : 'text-[#57534E] hover:text-[#242522]'
+              }`}
+            >
+              <Compass className="w-3 h-3" aria-hidden="true" />
+              <span>Walk</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => cameraMode !== 'orbit' && onToggleCameraMode()}
+              aria-pressed={cameraMode === 'orbit'}
+              className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1.5 font-mono text-[10px] sm:text-[11px] tracking-[0.08em] uppercase transition-colors whitespace-nowrap cursor-pointer ${
+                cameraMode === 'orbit'
+                  ? 'bg-[#56538A] text-white'
+                  : 'text-[#57534E] hover:text-[#242522]'
+              }`}
+            >
+              <Move3d className="w-3 h-3" aria-hidden="true" />
+              <span>Orbit</span>
+            </button>
+          </div>
 
-          {/* Zen / Unobstructed 3D Mode */}
-          <button
-            type="button"
-            onClick={onToggleZenMode}
-            className={`inline-flex items-center gap-2 px-3 py-1.5 font-mono text-[11px] tracking-[0.12em] uppercase border transition-colors whitespace-nowrap cursor-pointer ${
-              zenMode
-                ? 'bg-[#F4F1EB] text-[#242522] border-[#F4F1EB]'
-                : 'bg-transparent text-[#EBE7DF] border-[#F4F1EB]/20 hover:border-[#F4F1EB]/60'
-            }`}
-          >
-            {zenMode ? (
-              <>
-                <Eye className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Show Panels</span>
-              </>
-            ) : (
-              <>
-                <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>3D Pure View</span>
-              </>
-            )}
-          </button>
+          {/* Zone 3: Overlay Visibility Toggle & Collapse */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={onToggleZenMode}
+              aria-pressed={zenMode}
+              aria-label={zenMode ? 'Show content panels' : 'Hide content panels'}
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 font-mono text-[10px] sm:text-[11px] tracking-[0.08em] uppercase border transition-colors whitespace-nowrap cursor-pointer ${
+                zenMode
+                  ? 'bg-[#242522] text-[#F4F1EB] border-[#242522]'
+                  : 'bg-[#FFFFFF] text-[#242522] border-[#242522]/20 hover:border-[#242522]'
+              }`}
+            >
+              {zenMode ? (
+                <>
+                  <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span className="hidden sm:inline">Show Panels</span>
+                  <span className="sm:hidden">Panels</span>
+                </>
+              ) : (
+                <>
+                  <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span className="hidden sm:inline">Hide Panels</span>
+                  <span className="sm:hidden">3D</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              aria-label="Minimize 3D controls bar (shortcut H)"
+              title="Minimize controls (H)"
+              className="w-8 h-8 inline-flex items-center justify-center border border-[#242522]/15 text-[#57534E] hover:text-[#242522] hover:bg-[#EBE7DF] transition-colors cursor-pointer shrink-0"
+            >
+              <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+          </div>
         </div>
       )}
     </div>

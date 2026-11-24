@@ -3,6 +3,7 @@ import type { MuseumMaterialLibrary } from './materials';
 import {
   createAchievementsRotundaGroup,
   createEducationCodexGroup,
+  createExhibitionWingGroup,
   createExhibitSculpture,
   createExperiencePillarsGroup,
   createFinalPortalGroup,
@@ -170,7 +171,11 @@ export function buildMuseumWorld(
   philosophySculpture.position.set(-2.4, 0, -18);
   scene.add(philosophySculpture);
 
-  // Zone 03: Three Interactive Exhibition Sculptures (Synthetic Log, PQShield, Hospital)
+  // Zone 03: Exhibition Wing Frame + Three Interactive Exhibition Sculptures
+  const exhibitionWing = createExhibitionWingGroup(mats, refs);
+  exhibitionWing.position.set(0, 0, -38.6);
+  scene.add(exhibitionWing);
+
   const exhibit1 = createExhibitSculpture(
     'synthetic-log-generator',
     'PROJECT 01',
@@ -178,7 +183,7 @@ export function buildMuseumWorld(
     mats,
     refs
   );
-  exhibit1.position.set(-3.4, 0, -37.2);
+  exhibit1.position.set(-3.4, 0.22, -37.2);
   scene.add(exhibit1);
 
   const exhibit2 = createExhibitSculpture(
@@ -188,7 +193,7 @@ export function buildMuseumWorld(
     mats,
     refs
   );
-  exhibit2.position.set(0.0, 0, -40.0);
+  exhibit2.position.set(0.0, 0.22, -40.0);
   scene.add(exhibit2);
 
   const exhibit3 = createExhibitSculpture(
@@ -198,7 +203,7 @@ export function buildMuseumWorld(
     mats,
     refs
   );
-  exhibit3.position.set(3.4, 0, -37.2);
+  exhibit3.position.set(3.4, 0.22, -37.2);
   scene.add(exhibit3);
 
   // Zone 04: Tech Stack 7-Totem Apse
